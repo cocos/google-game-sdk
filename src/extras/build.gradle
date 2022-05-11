@@ -1,0 +1,51 @@
+project('aar') {
+    apply plugin: 'com.android.library'
+}
+
+project('apk') {
+    apply plugin: 'com.android.application'
+}
+
+subprojects {
+
+    android {
+        compileSdkVersion 28
+        defaultConfig {
+            minSdkVersion 16
+            targetSdkVersion 28
+            versionCode 1
+            versionName "1.0"
+            testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+            externalNativeBuild {
+                cmake {
+                    cppFlags ""
+                }
+            }
+            consumerProguardFiles 'lib-proguard-rules.txt'
+            sourceSets {
+                main {
+                    manifest.srcFile '../src/main/AndroidManifest.xml'
+                    java.srcDirs = ['../src/main/java']
+                }
+            }
+        }
+        buildTypes {
+            release {
+                minifyEnabled false
+            }
+        }
+        lintOptions {
+            abortOnError false
+        }
+    }
+
+    dependencies {
+        implementation fileTree(dir: 'libs', include: ['*.jar'])
+        testImplementation 'junit:junit:4.12'
+    }
+
+}
+
+task assembleRelease {
+    dependsOn 'apk:assembleRelease'
+}
