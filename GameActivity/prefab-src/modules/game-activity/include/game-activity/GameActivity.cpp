@@ -767,10 +767,15 @@ static void onSurfaceChanged_native(JNIEnv *env, jobject javaGameActivity,
                                                           code->nativeWindow);
                 }
 
-                code->lastWindowWidth =
-                    ANativeWindow_getWidth(code->nativeWindow);
-                code->lastWindowHeight =
-                    ANativeWindow_getHeight(code->nativeWindow);
+                if (width != code->lastWindowWidth ||
+                    height != code->lastWindowHeight) {
+                    code->lastWindowWidth = width;
+                    code->lastWindowHeight = height;
+                    if (code->callbacks.onNativeWindowResized != NULL) {
+                        code->callbacks.onNativeWindowResized(
+                                code, code->nativeWindow, width, height);
+                    }
+                }
             }
         } else {
             // Maybe it was resized?
@@ -778,6 +783,8 @@ static void onSurfaceChanged_native(JNIEnv *env, jobject javaGameActivity,
             int32_t newHeight = ANativeWindow_getHeight(code->nativeWindow);
             if (newWidth != code->lastWindowWidth ||
                 newHeight != code->lastWindowHeight) {
+                code->lastWindowWidth = newWidth;
+                code->lastWindowHeight = newHeight;
                 if (code->callbacks.onNativeWindowResized != NULL) {
                     code->callbacks.onNativeWindowResized(
                         code, code->nativeWindow, newWidth, newHeight);
@@ -1075,7 +1082,7 @@ extern "C" void GameActivityKeyEvent_fromJava(JNIEnv *env, jobject keyEvent,
 
 static bool onTouchEvent_native(JNIEnv *env, jobject javaGameActivity,
                                 jlong handle, jobject motionEvent) {
-    if (handle == 0) return;
+    if (handle == 0) return false;
     NativeCode *code = (NativeCode *)handle;
     if (code->callbacks.onTouchEvent == nullptr) return false;
 
@@ -1086,7 +1093,7 @@ static bool onTouchEvent_native(JNIEnv *env, jobject javaGameActivity,
 
 static bool onKeyUp_native(JNIEnv *env, jobject javaGameActivity, jlong handle,
                            jobject keyEvent) {
-    if (handle == 0) return;
+    if (handle == 0) return false;
     NativeCode *code = (NativeCode *)handle;
     if (code->callbacks.onKeyUp == nullptr) return false;
 
@@ -1097,9 +1104,9 @@ static bool onKeyUp_native(JNIEnv *env, jobject javaGameActivity, jlong handle,
 
 static bool onKeyDown_native(JNIEnv *env, jobject javaGameActivity,
                              jlong handle, jobject keyEvent) {
-    if (handle == 0) return;
+    if (handle == 0) return false;
     NativeCode *code = (NativeCode *)handle;
-    if (code->callbacks.onKeyDown == nullptr) return;
+    if (code->callbacks.onKeyDown == nullptr) return false;
 
     static GameActivityKeyEvent c_event;
     GameActivityKeyEvent_fromJava(env, keyEvent, &c_event);
@@ -1218,7 +1225,7 @@ static const char *const kWindowInsetsCompatTypePathName =
 
 #define GET_FIELD_ID(var, clazz, fieldName, fieldDescriptor)  \
     var = env->GetFieldID(clazz, fieldName, fieldDescriptor); \
-    LOG_FATAL_IF(!var, "Unable to find field %s" fieldName);
+    LOG_FATAL_IF(!var, "Unable to find field %s", fieldName);
 
 static int jniRegisterNativeMethods(JNIEnv *env, const char *className,
                                     const JNINativeMethod *methods,
