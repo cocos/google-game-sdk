@@ -211,7 +211,7 @@ GameTextInput::GameTextInput(JNIEnv *env, uint32_t max_string_size)
     stateClassInfo_.composingRegionEnd =
         env_->GetFieldID(stateJavaClass_, "composingRegionEnd", "I");
 
-    return s_gameTextInput.get();
+    s_gameTextInput.get();
 }
 
 GameTextInput::~GameTextInput() {

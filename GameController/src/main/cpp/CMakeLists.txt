@@ -13,32 +13,29 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
-cmake_minimum_required(VERSION 3.18.1)
 project(paddleboat C CXX)
-set(CMAKE_CXX_STANDARD 17)
 
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/paddleboat/include)
+include_directories(${CMAKE_CURRENT_LIST_DIR}/paddleboat/include)
 
 set( PADDLEBOAT_SRCS
-  InternalControllerTable.cpp
-  GameController.cpp
-  GameControllerDeviceInfo.cpp
-  GameControllerLog.cpp
-  GameControllerManager.cpp
-  GameControllerMappingUtils.cpp
-  paddleboat_c.cpp)
+        ${CMAKE_CURRENT_LIST_DIR}/InternalControllerTable.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/GameController.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/GameControllerDeviceInfo.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/GameControllerLog.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/GameControllerManager.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/GameControllerMappingUtils.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/paddleboat_c.cpp)
 
-set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Werror -Os")
-set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-exceptions -fno-rtti")
-set( CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -g0")
+# set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Werror -Os")
+# set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-exceptions -fno-rtti")
+# set( CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -g0")
 
 add_library(paddleboat_static STATIC ${PADDLEBOAT_SRCS})
 
 set_target_properties( paddleboat_static PROPERTIES
      LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/build )
 
-add_library(paddleboat SHARED paddleboat_c.cpp)
+add_library(paddleboat SHARED ${CMAKE_CURRENT_LIST_DIR}/paddleboat_c.cpp)
 
 target_link_libraries(paddleboat
   paddleboat_static
