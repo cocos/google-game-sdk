@@ -14,7 +14,6 @@
 
 package com.google.android.games.paddleboat;
 
-import android.annotation.SuppressLint;
 import android.hardware.Sensor;
 import android.hardware.SensorDirectChannel;
 import android.hardware.SensorEvent;
@@ -27,10 +26,6 @@ import android.os.Build;
 import android.util.Log;
 import android.view.InputDevice;
 
-import androidx.annotation.GuardedBy;
-
-import java.lang.NullPointerException;
-import java.util.List;
 
 public class GameControllerListener {
 

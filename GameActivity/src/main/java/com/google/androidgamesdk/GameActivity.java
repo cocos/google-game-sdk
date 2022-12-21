@@ -20,6 +20,7 @@ import static android.view.inputmethod.EditorInfo.IME_ACTION_NONE;
 import static android.view.inputmethod.EditorInfo.IME_MASK_ACTION;
 import static android.view.inputmethod.EditorInfo.IME_FLAG_NO_ENTER_ACTION;
 
+import android.app.Activity;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.content.res.AssetManager;
@@ -34,30 +35,17 @@ import android.view.MotionEvent;
 import android.view.Surface;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
-import android.view.ViewTreeObserver.OnGlobalLayoutListener;
 import android.view.View;
 import android.view.WindowManager;
 import android.view.inputmethod.EditorInfo;
 import android.widget.FrameLayout;
-import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.graphics.Insets;
-import androidx.core.view.DisplayCutoutCompat;
-import androidx.core.view.OnApplyWindowInsetsListener;
-import androidx.core.view.ViewCompat;
-import androidx.core.view.WindowCompat;
-import androidx.core.view.WindowInsetsCompat;
-import androidx.core.view.WindowInsetsControllerCompat;
-import com.google.androidgamesdk.gametextinput.InputConnection;
-import com.google.androidgamesdk.gametextinput.GameTextInput;
-import com.google.androidgamesdk.gametextinput.Listener;
-import com.google.androidgamesdk.gametextinput.Settings;
-import com.google.androidgamesdk.gametextinput.State;
+
 import dalvik.system.BaseDexClassLoader;
 import java.io.File;
 
 public class GameActivity
-    extends AppCompatActivity
-    implements SurfaceHolder.Callback2, Listener, OnApplyWindowInsetsListener {
+    extends Activity
+    implements SurfaceHolder.Callback2 {
   private static final String LOG_TAG = "GameActivity";
 
   /**
@@ -87,7 +75,7 @@ public class GameActivity
    * This can be null, usually if you override `onCreateSurfaceView` to render on the whole activity
    * window.
    */
-  protected InputEnabledSurfaceView mSurfaceView;
+  protected SurfaceView mSurfaceView;
 
   @Override
   public boolean onTouchEvent(MotionEvent event) {
@@ -96,7 +84,8 @@ public class GameActivity
 
   @Override
   public boolean onGenericMotionEvent(MotionEvent event) {
-    return onTouchEventNative(mNativeHandle, event);
+    return super.onGenericMotionEvent(event);
+//    return onTouchEventNative(mNativeHandle, event);
   }
 
   @Override
@@ -107,22 +96,6 @@ public class GameActivity
   @Override
   public boolean onKeyDown(final int keyCode, KeyEvent event) {
     return onKeyDownNative(mNativeHandle, event);
-  }
-
-  // Called when the IME has changed the input
-  @Override
-  public void stateChanged(State newState, boolean dismissed) {
-    onTextInputEventNative(mNativeHandle, newState);
-  }
-
-  // Called when we want to set the input state, e.g. before first showing the IME
-  public void setTextInputState(State s) {
-    if (mSurfaceView == null) return;
-
-    if (mSurfaceView.mInputConnection == null)
-      Log.w(LOG_TAG, "No input connection has been set yet");
-    else
-      mSurfaceView.mInputConnection.setState(s);
   }
 
   private long mNativeHandle;
@@ -171,10 +144,6 @@ public class GameActivity
 
   protected native boolean onKeyUpNative(long handle, KeyEvent keyEvent);
 
-  protected native void onTextInputEventNative(long handle, State softKeyboardEvent);
-
-  protected native void setInputConnectionNative(long handle, InputConnection c);
-
   protected native void onWindowInsetsChangedNative(long handle);
 
   /**
@@ -194,9 +163,9 @@ public class GameActivity
    * window.
    */
   protected void onCreateSurfaceView() {
-    mSurfaceView = new InputEnabledSurfaceView(this);
+    mSurfaceView = new SurfaceView(this);
     FrameLayout frameLayout = new FrameLayout(this);
-    contentViewId = ViewCompat.generateViewId();
+    contentViewId = View.generateViewId();
     frameLayout.setId(contentViewId);
     frameLayout.addView(mSurfaceView);
 
@@ -206,13 +175,6 @@ public class GameActivity
     mSurfaceView.getHolder().addCallback(
         this); // Register as a callback for the rendering of the surface, so that we can pass this
                // surface to the native code
-
-    // Note that in order for system window inset changes to be useful, the activity must call
-    // WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
-    // Otherwise, the view will always be inside any system windows.
-
-    // Listen for insets changes
-    ViewCompat.setOnApplyWindowInsetsListener(mSurfaceView, this);
 
   }
 
@@ -272,11 +234,6 @@ public class GameActivity
     if (mNativeHandle == 0) {
       throw new UnsatisfiedLinkError(
           "Unable to load native library \"" + path + "\": " + getDlError());
-    }
-
-    // Set up the input connection
-    if (mSurfaceView != null) {
-      setInputConnectionNative(mNativeHandle, mSurfaceView.mInputConnection);
     }
 
     super.onCreate(savedInstanceState);
@@ -391,41 +348,6 @@ public class GameActivity
     getWindow().setFormat(format);
   }
 
-  @Override
-  public WindowInsetsCompat onApplyWindowInsets(View v, WindowInsetsCompat insets) {
-    onWindowInsetsChangedNative(mNativeHandle);
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT_WATCH) {
-      // Pass through to the view - we don't want to handle the insets, just observe them.
-      v.onApplyWindowInsets(insets.toWindowInsets());
-    }
-    return insets;
-  }
-
-  public Insets getWindowInsets(int type) {
-    WindowInsetsCompat allInsets = ViewCompat.getRootWindowInsets(mSurfaceView);
-    Insets insets = allInsets.getInsets(type);
-    if (insets == Insets.NONE)
-      return null;
-    else
-      return insets;
-  }
-
-  public Insets getWaterfallInsets() {
-    WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(mSurfaceView);
-    DisplayCutoutCompat cutout = insets.getDisplayCutout();
-    if (cutout != null)
-      return cutout.getWaterfallInsets();
-    else
-      return null;
-  }
-
-  // From the text input Listener.
-  // Do nothing as we already handle inset events above.
-  @Override
-  public void onImeInsetsChanged(Insets insets) {
-    Log.v(LOG_TAG, "onImeInsetsChanged from Text Listener");
-  }
-
   /**
    * Get the EditorInfo structure used to initialize the IME when it is requested.
    * The default is to forward key requests to the app (InputType.TYPE_NULL) and to
@@ -462,37 +384,5 @@ public class GameActivity
     info.inputType = inputType;
     info.actionId = actionId;
     info.imeOptions = imeOptions;
-  }
-
-  protected class InputEnabledSurfaceView extends SurfaceView {
-
-    public InputEnabledSurfaceView(GameActivity context) {
-      super(context);
-      EditorInfo editorInfo = context.getImeEditorInfo();
-      mInputConnection = new InputConnection(context, this,
-          new Settings(editorInfo,
-              // Handle key events for InputType.TYPE_NULL:
-              /*forwardKeyEvents=*/editorInfo.inputType==InputType.TYPE_NULL))
-                             .setListener(context);
-    }
-
-    InputConnection mInputConnection;
-
-    @Override
-    public InputConnection onCreateInputConnection(EditorInfo outAttrs) {
-      // TODO (b/187147952): allow to disable the usage of GameTextInput in GameActivity.
-      if (outAttrs != null) {
-        GameTextInput.copyEditorInfo(mInputConnection.getEditorInfo(), outAttrs);
-      }
-      return mInputConnection;
-    }
-
-    public EditorInfo getEditorInfo() {
-      return mInputConnection.getEditorInfo();
-    }
-
-    public void setEditorInfo(EditorInfo e) {
-      mInputConnection.setEditorInfo(e);
-    }
   }
 }
