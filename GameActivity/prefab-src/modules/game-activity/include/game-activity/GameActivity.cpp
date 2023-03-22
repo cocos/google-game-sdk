@@ -16,6 +16,7 @@
 #define LOG_TAG "GameActivity"
 
 #include "GameActivity.h"
+#include "system_utils.h"
 
 #include <android/api-level.h>
 #include <android/asset_manager.h>
@@ -590,11 +591,11 @@ static jlong loadNativeCode_native(JNIEnv *env, jobject javaGameActivity,
     }
     code->createActivityFunc(code, rawSavedState, rawSavedSize);
 
-    code->gameTextInput = GameTextInput_init(env, 0);
-    GameTextInput_setEventCallback(code->gameTextInput,
-                                   reinterpret_cast<GameTextInputEventCallback>(
-                                       code->callbacks.onTextInputEvent),
-                                   code);
+//    code->gameTextInput = GameTextInput_init(env, 0);
+//    GameTextInput_setEventCallback(code->gameTextInput,
+//                                   reinterpret_cast<GameTextInputEventCallback>(
+//                                       code->callbacks.onTextInputEvent),
+//                                   code);
 
     if (rawSavedState != NULL) {
         env->ReleaseByteArrayElements(savedState, rawSavedState, 0);
@@ -848,9 +849,9 @@ extern "C" void GameActivity_setImeEditorInfo(GameActivity *activity,
                                               int imeOptions) {
     JNIEnv *env;
     if (activity->vm->AttachCurrentThread(&env, NULL) == JNI_OK) {
-        env->CallVoidMethod(activity->javaGameActivity,
-                            gGameActivityClassInfo.setImeEditorInfoFields,
-                            inputType, actionId, imeOptions);
+//        env->CallVoidMethod(activity->javaGameActivity,
+//                            gGameActivityClassInfo.setImeEditorInfoFields,
+//                            inputType, actionId, imeOptions);
     }
 }
 
@@ -870,47 +871,29 @@ static struct {
     jmethodID getClassification;
     jmethodID getEdgeFlags;
 
+    jmethodID getHistorySize;
+    jmethodID getHistoricalEventTime;
+
     jmethodID getPointerCount;
     jmethodID getPointerId;
+
+    jmethodID getToolType;
+
     jmethodID getRawX;
     jmethodID getRawY;
     jmethodID getXPrecision;
     jmethodID getYPrecision;
     jmethodID getAxisValue;
+
+    jmethodID getHistoricalAxisValue;
 } gMotionEventClassInfo;
 
-static void initKeyEvents(JNIEnv *env) {
-    int sdkVersion = gamesdk::GetSystemPropAsInt("ro.build.version.sdk");
-    gKeyEventClassInfo = {0};
-    jclass keyEventClass = env->FindClass("android/view/KeyEvent");
-    gKeyEventClassInfo.getDeviceId =
-        env->GetMethodID(keyEventClass, "getDeviceId", "()I");
-    gKeyEventClassInfo.getSource =
-        env->GetMethodID(keyEventClass, "getSource", "()I");
-    gKeyEventClassInfo.getAction =
-        env->GetMethodID(keyEventClass, "getAction", "()I");
-    gKeyEventClassInfo.getEventTime =
-        env->GetMethodID(keyEventClass, "getEventTime", "()J");
-    gKeyEventClassInfo.getDownTime =
-        env->GetMethodID(keyEventClass, "getDownTime", "()J");
-    gKeyEventClassInfo.getFlags =
-        env->GetMethodID(keyEventClass, "getFlags", "()I");
-    gKeyEventClassInfo.getMetaState =
-        env->GetMethodID(keyEventClass, "getMetaState", "()I");
-    if (sdkVersion >= 13) {
-        gKeyEventClassInfo.getModifiers =
-            env->GetMethodID(keyEventClass, "getModifiers", "()I");
-    }
-    gKeyEventClassInfo.getRepeatCount =
-        env->GetMethodID(keyEventClass, "getRepeatCount", "()I");
-    gKeyEventClassInfo.getKeyCode =
-        env->GetMethodID(keyEventClass, "getKeyCode", "()I");
-    gKeyEventClassInfo.getScanCode =
-        env->GetMethodID(keyEventClass, "getScanCode", "()I");
-    gKeyEventClassInfo.getUnicodeChar =
-        env->GetMethodID(keyEventClass, "getUnicodeChar", "()I");
+extern "C" void GameActivityMotionEvent_destroy(
+    GameActivityMotionEvent *c_event) {
+    delete c_event->historicalAxisValues;
+    delete c_event->historicalEventTimesMillis;
+    delete c_event->historicalEventTimesNanos;
 }
-
 
 extern "C" void GameActivityMotionEvent_fromJava(
     JNIEnv *env, jobject motionEvent, GameActivityMotionEvent *out_event,
@@ -919,66 +902,66 @@ extern "C" void GameActivityMotionEvent_fromJava(
     int actionButton, int buttonState, int classification, int edgeFlags,
     float precisionX, float precisionY) {
     pointerCount =
-        std::min(pointerCount, GAMEACTIVITY_MAX_NUM_POINTERS_IN_MOTION_EVENT);
+            std::min(pointerCount, GAMEACTIVITY_MAX_NUM_POINTERS_IN_MOTION_EVENT);
     out_event->pointerCount = pointerCount;
-    for (int i = 0; i < pointerCount; ++i) {
+    for (jint i = 0; i < pointerCount; ++i) {
         out_event->pointers[i] = {
-            /*id=*/env->CallIntMethod(motionEvent,
-                                      gMotionEventClassInfo.getPointerId, i),
-            /*toolType=*/
-            env->CallIntMethod(motionEvent, gMotionEventClassInfo.getToolType,
-                               i),
-            /*axisValues=*/{0},
-            /*rawX=*/gMotionEventClassInfo.getRawX
-                ? env->CallFloatMethod(motionEvent,
-                                       gMotionEventClassInfo.getRawX, i)
-                : 0,
-            /*rawY=*/gMotionEventClassInfo.getRawY
-                ? env->CallFloatMethod(motionEvent,
-                                       gMotionEventClassInfo.getRawY, i)
-                : 0,
+                /*id=*/env->CallIntMethod(motionEvent,
+                                          gMotionEventClassInfo.getPointerId, i),
+                /*toolType=*/
+                       env->CallIntMethod(motionEvent, gMotionEventClassInfo.getToolType,
+                                          i),
+                /*axisValues=*/{0.0F},
+                /*rawX=*/gMotionEventClassInfo.getRawX
+                         ? env->CallFloatMethod(motionEvent,
+                                                gMotionEventClassInfo.getRawX, i)
+                         : 0.0F,
+                /*rawY=*/gMotionEventClassInfo.getRawY
+                         ? env->CallFloatMethod(motionEvent,
+                                                gMotionEventClassInfo.getRawY, i)
+                         : 0.0F,
         };
 
         for (int axisIndex = 0;
              axisIndex < GAME_ACTIVITY_POINTER_INFO_AXIS_COUNT; ++axisIndex) {
             if (enabledAxes[axisIndex]) {
                 out_event->pointers[i].axisValues[axisIndex] =
-                    env->CallFloatMethod(motionEvent,
-                                         gMotionEventClassInfo.getAxisValue,
-                                         axisIndex, i);
+                        env->CallFloatMethod(motionEvent,
+                                             gMotionEventClassInfo.getAxisValue,
+                                             axisIndex, i);
             }
         }
     }
 
     out_event->historySize = historySize;
     out_event->historicalAxisValues =
-        new float[historySize * pointerCount *
-                  GAME_ACTIVITY_POINTER_INFO_AXIS_COUNT];
+            new float[historySize * pointerCount *
+                      GAME_ACTIVITY_POINTER_INFO_AXIS_COUNT];
     out_event->historicalEventTimesMillis = new long[historySize];
     out_event->historicalEventTimesNanos = new long[historySize];
 
     for (int historyIndex = 0; historyIndex < historySize; historyIndex++) {
         out_event->historicalEventTimesMillis[historyIndex] =
-            env->CallLongMethod(motionEvent,
-                                gMotionEventClassInfo.getHistoricalEventTime,
-                                historyIndex);
+                env->CallLongMethod(motionEvent,
+                                    gMotionEventClassInfo.getHistoricalEventTime,
+                                    historyIndex);
         out_event->historicalEventTimesNanos[historyIndex] =
-            out_event->historicalEventTimesMillis[historyIndex] * 1000000;
+                out_event->historicalEventTimesMillis[historyIndex] * 1000000;
         for (int i = 0; i < pointerCount; ++i) {
             int pointerOffset = i * GAME_ACTIVITY_POINTER_INFO_AXIS_COUNT;
             int historyAxisOffset = historyIndex * pointerCount *
                                     GAME_ACTIVITY_POINTER_INFO_AXIS_COUNT;
             float *axisValues =
-                &out_event
-                     ->historicalAxisValues[historyAxisOffset + pointerOffset];
+                    &out_event
+                            ->historicalAxisValues[historyAxisOffset + pointerOffset];
             for (int axisIndex = 0;
                  axisIndex < GAME_ACTIVITY_POINTER_INFO_AXIS_COUNT;
                  ++axisIndex) {
                 if (enabledAxes[axisIndex]) {
                     axisValues[axisIndex] = env->CallFloatMethod(
-                        motionEvent,
-                        gMotionEventClassInfo.getHistoricalAxisValue, axisIndex,
-                        i, historyIndex);
+                            motionEvent,
+                            gMotionEventClassInfo.getHistoricalAxisValue, axisIndex,
+                            i, historyIndex);
                 }
             }
         }
@@ -1021,9 +1004,39 @@ static struct {
     jmethodID getUnicodeChar;
 } gKeyEventClassInfo;
 
-
 extern "C" void GameActivityKeyEvent_fromJava(JNIEnv *env, jobject keyEvent,
                                               GameActivityKeyEvent *out_event) {
+    static bool gKeyEventClassInfoInitialized = false;
+    if (!gKeyEventClassInfoInitialized) {
+        int sdkVersion = GetSystemPropAsInt("ro.build.version.sdk");
+        gKeyEventClassInfo = {0};
+        jclass keyEventClass = env->FindClass("android/view/KeyEvent");
+        gKeyEventClassInfo.getDeviceId =
+            env->GetMethodID(keyEventClass, "getDeviceId", "()I");
+        gKeyEventClassInfo.getSource =
+            env->GetMethodID(keyEventClass, "getSource", "()I");
+        gKeyEventClassInfo.getAction =
+            env->GetMethodID(keyEventClass, "getAction", "()I");
+        gKeyEventClassInfo.getEventTime =
+            env->GetMethodID(keyEventClass, "getEventTime", "()J");
+        gKeyEventClassInfo.getDownTime =
+            env->GetMethodID(keyEventClass, "getDownTime", "()J");
+        gKeyEventClassInfo.getFlags =
+            env->GetMethodID(keyEventClass, "getFlags", "()I");
+        gKeyEventClassInfo.getMetaState =
+            env->GetMethodID(keyEventClass, "getMetaState", "()I");
+        if (sdkVersion >= 13) {
+            gKeyEventClassInfo.getModifiers =
+                env->GetMethodID(keyEventClass, "getModifiers", "()I");
+        }
+        gKeyEventClassInfo.getRepeatCount =
+            env->GetMethodID(keyEventClass, "getRepeatCount", "()I");
+        gKeyEventClassInfo.getKeyCode =
+            env->GetMethodID(keyEventClass, "getKeyCode", "()I");
+
+        gKeyEventClassInfoInitialized = true;
+    }
+
     *out_event = {
         /*deviceId=*/env->CallIntMethod(keyEvent,
                                         gKeyEventClassInfo.getDeviceId),
@@ -1044,28 +1057,29 @@ extern "C" void GameActivityKeyEvent_fromJava(JNIEnv *env, jobject keyEvent,
         /*repeatCount=*/
         env->CallIntMethod(keyEvent, gKeyEventClassInfo.getRepeatCount),
         /*keyCode=*/
-        env->CallIntMethod(keyEvent, gKeyEventClassInfo.getKeyCode),
-        /*scanCode=*/
-        env->CallIntMethod(keyEvent, gKeyEventClassInfo.getScanCode),
-        /*unicodeChar=*/
-        env->CallIntMethod(keyEvent, gKeyEventClassInfo.getUnicodeChar)};
+        env->CallIntMethod(keyEvent, gKeyEventClassInfo.getKeyCode)};
 }
-
-extern "C" void GameActivityEventsInit(JNIEnv *env) {
-    initMotionEvents(env);
-    initKeyEvents(env);
-}
-
 
 static bool onTouchEvent_native(JNIEnv *env, jobject javaGameActivity,
-                                jlong handle, jobject motionEvent) {
+                                jlong handle, jobject motionEvent,
+                                int pointerCount, int historySize, int deviceId,
+                                int source, int action, int64_t eventTime,
+                                int64_t downTime, int flags, int metaState,
+                                int actionButton, int buttonState,
+                                int classification, int edgeFlags,
+                                float precisionX, float precisionY) {
     if (handle == 0) return false;
     NativeCode *code = (NativeCode *)handle;
     if (code->callbacks.onTouchEvent == nullptr) return false;
 
     static GameActivityMotionEvent c_event;
-    GameActivityMotionEvent_fromJava(env, motionEvent, &c_event);
-    return code->callbacks.onTouchEvent(code, &c_event);
+    GameActivityMotionEvent_fromJava(
+        env, motionEvent, &c_event, pointerCount, historySize, deviceId, source,
+        action, eventTime, downTime, flags, metaState, actionButton,
+        buttonState, classification, edgeFlags, precisionX, precisionY);
+    auto result = code->callbacks.onTouchEvent(code, &c_event);
+    GameActivityMotionEvent_destroy(&c_event);
+    return result;
 }
 
 static bool onKeyUp_native(JNIEnv *env, jobject javaGameActivity, jlong handle,
@@ -1165,19 +1179,19 @@ static const JNINativeMethod g_methods[] = {
     {"onSurfaceRedrawNeededNative", "(JLandroid/view/Surface;)V",
      (void *)onSurfaceRedrawNeeded_native},
     {"onSurfaceDestroyedNative", "(J)V", (void *)onSurfaceDestroyed_native},
-    {"onTouchEventNative", "(JLandroid/view/MotionEvent;)Z",
+    {"onTouchEventNative", "(JLandroid/view/MotionEvent;IIIIIJJIIIIIIFF)Z",
      (void *)onTouchEvent_native},
     {"onKeyDownNative", "(JLandroid/view/KeyEvent;)Z",
      (void *)onKeyDown_native},
     {"onKeyUpNative", "(JLandroid/view/KeyEvent;)Z", (void *)onKeyUp_native},
-    {"onTextInputEventNative",
+/*    {"onTextInputEventNative",
      "(JLcom/google/androidgamesdk/gametextinput/State;)V",
      (void *)onTextInput_native},
     {"onWindowInsetsChangedNative", "(J)V",
      (void *)onWindowInsetsChanged_native},
     {"setInputConnectionNative",
      "(JLcom/google/androidgamesdk/gametextinput/InputConnection;)V",
-     (void *)setInputConnection_native},
+     (void *)setInputConnection_native},*/
 };
 
 static const char *const kGameActivityPathName =
@@ -1228,73 +1242,124 @@ static int jniRegisterNativeMethods(JNIEnv *env, const char *className,
     LOG_FATAL("RegisterNatives failed for '%s'; aborting...", className);
 }
 
+static void initKeyEvents(JNIEnv *env) {
+    int sdkVersion = gamesdk::GetSystemPropAsInt("ro.build.version.sdk");
+    gKeyEventClassInfo = {0};
+    jclass keyEventClass = env->FindClass("android/view/KeyEvent");
+    gKeyEventClassInfo.getDeviceId =
+        env->GetMethodID(keyEventClass, "getDeviceId", "()I");
+    gKeyEventClassInfo.getSource =
+        env->GetMethodID(keyEventClass, "getSource", "()I");
+    gKeyEventClassInfo.getAction =
+        env->GetMethodID(keyEventClass, "getAction", "()I");
+    gKeyEventClassInfo.getEventTime =
+        env->GetMethodID(keyEventClass, "getEventTime", "()J");
+    gKeyEventClassInfo.getDownTime =
+        env->GetMethodID(keyEventClass, "getDownTime", "()J");
+    gKeyEventClassInfo.getFlags =
+        env->GetMethodID(keyEventClass, "getFlags", "()I");
+    gKeyEventClassInfo.getMetaState =
+        env->GetMethodID(keyEventClass, "getMetaState", "()I");
+    if (sdkVersion >= 13) {
+        gKeyEventClassInfo.getModifiers =
+            env->GetMethodID(keyEventClass, "getModifiers", "()I");
+    }
+    gKeyEventClassInfo.getRepeatCount =
+        env->GetMethodID(keyEventClass, "getRepeatCount", "()I");
+    gKeyEventClassInfo.getKeyCode =
+        env->GetMethodID(keyEventClass, "getKeyCode", "()I");
+    gKeyEventClassInfo.getScanCode =
+        env->GetMethodID(keyEventClass, "getScanCode", "()I");
+    gKeyEventClassInfo.getUnicodeChar =
+        env->GetMethodID(keyEventClass, "getUnicodeChar", "()I");
+}
+
+static void initMotionEvents(JNIEnv *env) {
+    int sdkVersion = gamesdk::GetSystemPropAsInt("ro.build.version.sdk");
+    gMotionEventClassInfo = {0};
+    jclass motionEventClass = env->FindClass("android/view/MotionEvent");
+    gMotionEventClassInfo.getDeviceId =
+        env->GetMethodID(motionEventClass, "getDeviceId", "()I");
+    gMotionEventClassInfo.getSource =
+        env->GetMethodID(motionEventClass, "getSource", "()I");
+    gMotionEventClassInfo.getAction =
+        env->GetMethodID(motionEventClass, "getAction", "()I");
+    gMotionEventClassInfo.getEventTime =
+        env->GetMethodID(motionEventClass, "getEventTime", "()J");
+    gMotionEventClassInfo.getDownTime =
+        env->GetMethodID(motionEventClass, "getDownTime", "()J");
+    gMotionEventClassInfo.getFlags =
+        env->GetMethodID(motionEventClass, "getFlags", "()I");
+    gMotionEventClassInfo.getMetaState =
+        env->GetMethodID(motionEventClass, "getMetaState", "()I");
+    if (sdkVersion >= 23) {
+        gMotionEventClassInfo.getActionButton =
+            env->GetMethodID(motionEventClass, "getActionButton", "()I");
+    }
+    if (sdkVersion >= 14) {
+        gMotionEventClassInfo.getButtonState =
+            env->GetMethodID(motionEventClass, "getButtonState", "()I");
+    }
+    if (sdkVersion >= 29) {
+        gMotionEventClassInfo.getClassification =
+            env->GetMethodID(motionEventClass, "getClassification", "()I");
+    }
+    gMotionEventClassInfo.getEdgeFlags =
+        env->GetMethodID(motionEventClass, "getEdgeFlags", "()I");
+
+    gMotionEventClassInfo.getHistorySize =
+        env->GetMethodID(motionEventClass, "getHistorySize", "()I");
+    gMotionEventClassInfo.getHistoricalEventTime =
+        env->GetMethodID(motionEventClass, "getHistoricalEventTime", "(I)J");
+
+    gMotionEventClassInfo.getPointerCount =
+        env->GetMethodID(motionEventClass, "getPointerCount", "()I");
+    gMotionEventClassInfo.getPointerId =
+        env->GetMethodID(motionEventClass, "getPointerId", "(I)I");
+    gMotionEventClassInfo.getToolType =
+        env->GetMethodID(motionEventClass, "getToolType", "(I)I");
+    if (sdkVersion >= 29) {
+        gMotionEventClassInfo.getRawX =
+            env->GetMethodID(motionEventClass, "getRawX", "(I)F");
+        gMotionEventClassInfo.getRawY =
+            env->GetMethodID(motionEventClass, "getRawY", "(I)F");
+    }
+    gMotionEventClassInfo.getXPrecision =
+        env->GetMethodID(motionEventClass, "getXPrecision", "()F");
+    gMotionEventClassInfo.getYPrecision =
+        env->GetMethodID(motionEventClass, "getYPrecision", "()F");
+    gMotionEventClassInfo.getAxisValue =
+        env->GetMethodID(motionEventClass, "getAxisValue", "(II)F");
+
+    gMotionEventClassInfo.getHistoricalAxisValue =
+        env->GetMethodID(motionEventClass, "getHistoricalAxisValue", "(III)F");
+}
+
+static void GameActivityEventsInit(JNIEnv *env) {
+    initMotionEvents(env);
+    initKeyEvents(env);
+}
+
 extern "C" int GameActivity_register(JNIEnv *env) {
- ALOGD("GameActivity_register");
+    ALOGD("GameActivity_register");
     jclass activity_class;
     FIND_CLASS(activity_class, kGameActivityPathName);
     GET_METHOD_ID(gGameActivityClassInfo.finish, activity_class, "finish",
                   "()V");
     GET_METHOD_ID(gGameActivityClassInfo.setWindowFlags, activity_class,
                   "setWindowFlags", "(II)V");
-    GET_METHOD_ID(gGameActivityClassInfo.getWindowInsets, activity_class,
+/*    GET_METHOD_ID(gGameActivityClassInfo.getWindowInsets, activity_class,
                   "getWindowInsets", "(I)Landroidx/core/graphics/Insets;");
     GET_METHOD_ID(gGameActivityClassInfo.getWaterfallInsets, activity_class,
                   "getWaterfallInsets", "()Landroidx/core/graphics/Insets;");
     GET_METHOD_ID(gGameActivityClassInfo.setImeEditorInfoFields, activity_class,
                   "setImeEditorInfoFields", "(III)V");
-
     jclass insets_class;
     FIND_CLASS(insets_class, kInsetsPathName);
     GET_FIELD_ID(gInsetsClassInfo.left, insets_class, "left", "I");
     GET_FIELD_ID(gInsetsClassInfo.right, insets_class, "right", "I");
     GET_FIELD_ID(gInsetsClassInfo.top, insets_class, "top", "I");
     GET_FIELD_ID(gInsetsClassInfo.bottom, insets_class, "bottom", "I");
-
-    jclass configuration_class;
-    FIND_CLASS(configuration_class, kConfigurationPathName);
-
-    if (android_get_device_api_level() >= 26) {
-        GET_FIELD_ID(gConfigurationClassInfo.colorMode, configuration_class,
-                     "colorMode", "I");
-    }
-
-    GET_FIELD_ID(gConfigurationClassInfo.densityDpi, configuration_class,
-                 "densityDpi", "I");
-    GET_FIELD_ID(gConfigurationClassInfo.fontScale, configuration_class,
-                 "fontScale", "F");
-
-    if (android_get_device_api_level() >= 31) {
-        GET_FIELD_ID(gConfigurationClassInfo.fontWeightAdjustment,
-                     configuration_class, "fontWeightAdjustment", "I");
-    }
-
-    GET_FIELD_ID(gConfigurationClassInfo.hardKeyboardHidden,
-                 configuration_class, "hardKeyboardHidden", "I");
-    GET_FIELD_ID(gConfigurationClassInfo.keyboard, configuration_class,
-                 "keyboard", "I");
-    GET_FIELD_ID(gConfigurationClassInfo.keyboardHidden, configuration_class,
-                 "keyboardHidden", "I");
-    GET_FIELD_ID(gConfigurationClassInfo.mcc, configuration_class, "mcc", "I");
-    GET_FIELD_ID(gConfigurationClassInfo.mnc, configuration_class, "mnc", "I");
-    GET_FIELD_ID(gConfigurationClassInfo.navigation, configuration_class,
-                 "navigation", "I");
-    GET_FIELD_ID(gConfigurationClassInfo.navigationHidden, configuration_class,
-                 "navigationHidden", "I");
-    GET_FIELD_ID(gConfigurationClassInfo.orientation, configuration_class,
-                 "orientation", "I");
-    GET_FIELD_ID(gConfigurationClassInfo.screenHeightDp, configuration_class,
-                 "screenHeightDp", "I");
-    GET_FIELD_ID(gConfigurationClassInfo.screenLayout, configuration_class,
-                 "screenLayout", "I");
-    GET_FIELD_ID(gConfigurationClassInfo.screenWidthDp, configuration_class,
-                 "screenWidthDp", "I");
-    GET_FIELD_ID(gConfigurationClassInfo.smallestScreenWidthDp,
-                 configuration_class, "smallestScreenWidthDp", "I");
-    GET_FIELD_ID(gConfigurationClassInfo.touchscreen, configuration_class,
-                 "touchscreen", "I");
-    GET_FIELD_ID(gConfigurationClassInfo.uiMode, configuration_class, "uiMode",
-                 "I");
-
     jclass windowInsetsCompatType_class;
     FIND_CLASS(windowInsetsCompatType_class, kWindowInsetsCompatTypePathName);
     gWindowInsetsCompatTypeClassInfo.clazz =
@@ -1316,7 +1381,7 @@ extern "C" int GameActivity_register(JNIEnv *env) {
         GET_STATIC_METHOD_ID(gWindowInsetsCompatTypeClassInfo.methods[i],
                              windowInsetsCompatType_class, methodNames[i],
                              "()I");
-    }
+    }*/
 
     GameActivityEventsInit(env);
 
@@ -1326,7 +1391,7 @@ extern "C" int GameActivity_register(JNIEnv *env) {
 
 // Register this method so that GameActiviy_register does not need to be called
 // manually.
-extern "C" jlong Java_com_google_androidgamesdk_GameActivity_loadNativeCode(
+extern "C" JNIEXPORT jlong JNICALL Java_com_google_androidgamesdk_GameActivity_loadNativeCode(
     JNIEnv *env, jobject javaGameActivity, jstring path, jstring funcName,
     jstring internalDataDir, jstring obbDir, jstring externalDataDir,
     jobject jAssetMgr, jbyteArray savedState) {
