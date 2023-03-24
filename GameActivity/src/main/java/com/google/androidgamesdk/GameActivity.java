@@ -50,7 +50,7 @@ public class GameActivity
 
   /**
    * Optional meta-that can be in the manifest for this component, specifying
-   * the name of the native shared library to load.  If not specified,
+   * the name of the native shared library to load. If not specified,
    * "main" is used.
    */
   public static final String META_DATA_LIB_NAME = "android.app.lib_name";
@@ -58,7 +58,7 @@ public class GameActivity
   /**
    * Optional meta-that can be in the manifest for this component, specifying
    * the name of the main entry point for this native activity in the
-   * {@link #META_DATA_LIB_NAME} native code.  If not specified,
+   * {@link #META_DATA_LIB_NAME} native code. If not specified,
    * "GameActivity_onCreate" is used.
    */
   public static final String META_DATA_FUNC_NAME = "android.app.func_name";
@@ -70,32 +70,60 @@ public class GameActivity
   private EditorInfo imeEditorInfo;
 
   /**
-   * The SurfaceView used by default for displaying the game and getting a text input.
+   * The SurfaceView used by default for displaying the game and getting a text
+   * input.
    * You can override its creation in `onCreateSurfaceView`.
-   * This can be null, usually if you override `onCreateSurfaceView` to render on the whole activity
+   * This can be null, usually if you override `onCreateSurfaceView` to render on
+   * the whole activity
    * window.
    */
   protected SurfaceView mSurfaceView;
 
+  protected boolean processMotionEvent(MotionEvent event) {
+    int action = (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) ? event.getActionButton() : 0;
+    int cls = (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) ? event.getClassification() : 0;
+
+    return onTouchEventNative(mNativeHandle, event, event.getPointerCount(),
+        event.getHistorySize(), event.getDeviceId(), event.getSource(), event.getAction(),
+        event.getEventTime(), event.getDownTime(), event.getFlags(), event.getMetaState(), action,
+        event.getButtonState(), cls, event.getEdgeFlags(), event.getXPrecision(),
+        event.getYPrecision());
+  }
+
   @Override
   public boolean onTouchEvent(MotionEvent event) {
-    return onTouchEventNative(mNativeHandle, event);
+    if (processMotionEvent(event)) {
+      return true;
+    } else {
+      return super.onTouchEvent(event);
+    }
   }
 
   @Override
   public boolean onGenericMotionEvent(MotionEvent event) {
-    return super.onGenericMotionEvent(event);
-//    return onTouchEventNative(mNativeHandle, event);
+    if (processMotionEvent(event)) {
+      return true;
+    } else {
+      return super.onGenericMotionEvent(event);
+    }
   }
 
   @Override
   public boolean onKeyUp(final int keyCode, KeyEvent event) {
-    return onKeyUpNative(mNativeHandle, event);
+    if (onKeyUpNative(mNativeHandle, event)) {
+      return true;
+    } else {
+      return super.onKeyUp(keyCode, event);
+    }
   }
 
   @Override
   public boolean onKeyDown(final int keyCode, KeyEvent event) {
-    return onKeyDownNative(mNativeHandle, event);
+    if (onKeyDownNative(mNativeHandle, event)) {
+      return true;
+    } else {
+      return super.onKeyDown(keyCode, event);
+    }
   }
 
   private long mNativeHandle;
@@ -138,7 +166,10 @@ public class GameActivity
 
   protected native void onSurfaceDestroyedNative(long handle);
 
-  protected native boolean onTouchEventNative(long handle, MotionEvent motionEvent);
+  protected native boolean onTouchEventNative(long handle, MotionEvent motionEvent,
+      int pointerCount, int historySize, int deviceId, int source, int action, long eventTime,
+      long downTime, int flags, int metaState, int actionButton, int buttonState,
+      int classification, int edgeFlags, float precisionX, float precisionY);
 
   protected native boolean onKeyDownNative(long handle, KeyEvent keyEvent);
 
@@ -148,18 +179,22 @@ public class GameActivity
 
   /**
    * Get the pointer to the C `GameActivity` struct associated to this activity.
-   * @return the pointer to the C `GameActivity` struct associated to this activity.
+   * 
+   * @return the pointer to the C `GameActivity` struct associated to this
+   *         activity.
    */
   public long getGameActivityNativeHandle() {
     return this.mNativeHandle;
   }
 
   /**
-   * Called to create the SurfaceView when the game will be rendered. It should be stored in
+   * Called to create the SurfaceView when the game will be rendered. It should be
+   * stored in
    * the mSurfaceView field, and its ID in contentViewId (if applicable).
    *
    * You can also redefine this to not create a SurfaceView at all,
-   * and call `getWindow().takeSurface(this);` instead if you want to render on the whole activity
+   * and call `getWindow().takeSurface(this);` instead if you want to render on
+   * the whole activity
    * window.
    */
   protected void onCreateSurfaceView() {
@@ -173,14 +208,17 @@ public class GameActivity
     frameLayout.requestFocus();
 
     mSurfaceView.getHolder().addCallback(
-        this); // Register as a callback for the rendering of the surface, so that we can pass this
+        this); // Register as a callback for the rendering of the surface, so that we can pass
+               // this
                // surface to the native code
 
   }
 
   /**
-   * Called to set up the window after the SurfaceView is created. Override this if you want to
-   * change the Format (default is `PixelFormat.RGB_565`) or the Soft Input Mode (default is
+   * Called to set up the window after the SurfaceView is created. Override this
+   * if you want to
+   * change the Format (default is `PixelFormat.RGB_565`) or the Soft Input Mode
+   * (default is
    * `WindowManager.LayoutParams.SOFT_INPUT_STATE_UNSPECIFIED |
    * WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE`).
    */
@@ -224,8 +262,8 @@ public class GameActivity
           + " using classloader: " + classLoader.toString());
     }
 
-    byte[] nativeSavedState =
-        savedInstanceState != null ? savedInstanceState.getByteArray(KEY_NATIVE_SAVED_STATE) : null;
+    byte[] nativeSavedState = savedInstanceState != null ? savedInstanceState.getByteArray(KEY_NATIVE_SAVED_STATE)
+        : null;
 
     mNativeHandle = loadNativeCode(path, funcname, getAbsolutePath(getFilesDir()),
         getAbsolutePath(getObbDir()), getAbsolutePath(getExternalFilesDir(null)),
@@ -350,12 +388,14 @@ public class GameActivity
 
   /**
    * Get the EditorInfo structure used to initialize the IME when it is requested.
-   * The default is to forward key requests to the app (InputType.TYPE_NULL) and to
+   * The default is to forward key requests to the app (InputType.TYPE_NULL) and
+   * to
    * have no action button (IME_ACTION_NONE).
-   * See https://developer.android.com/reference/android/view/inputmethod/EditorInfo.
+   * See
+   * https://developer.android.com/reference/android/view/inputmethod/EditorInfo.
    */
   public EditorInfo getImeEditorInfo() {
-    if (imeEditorInfo==null) {
+    if (imeEditorInfo == null) {
       imeEditorInfo = new EditorInfo();
       imeEditorInfo.inputType = InputType.TYPE_NULL;
       imeEditorInfo.actionId = IME_ACTION_NONE;
@@ -367,7 +407,8 @@ public class GameActivity
   /**
    * Set the EditorInfo structure used to initialize the IME when it is requested.
    * Set the inputType and actionId in order to customize how the IME behaves.
-   * See https://developer.android.com/reference/android/view/inputmethod/EditorInfo.
+   * See
+   * https://developer.android.com/reference/android/view/inputmethod/EditorInfo.
    */
   public void setImeEditorInfo(EditorInfo info) {
     imeEditorInfo = info;
@@ -377,7 +418,8 @@ public class GameActivity
    * Set the inpuType and actionId fields of the EditorInfo structure used to
    * initialize the IME when it is requested.
    * This is called from the native side by GameActivity_setImeEditorInfo.
-   * See https://developer.android.com/reference/android/view/inputmethod/EditorInfo.
+   * See
+   * https://developer.android.com/reference/android/view/inputmethod/EditorInfo.
    */
   public void setImeEditorInfoFields(int inputType, int actionId, int imeOptions) {
     EditorInfo info = getImeEditorInfo();
