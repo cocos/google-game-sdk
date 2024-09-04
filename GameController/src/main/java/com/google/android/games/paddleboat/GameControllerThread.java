@@ -54,6 +54,14 @@ public class GameControllerThread extends Thread implements InputManager.InputDe
         }
     }
 
+    public void terminate() {
+        if (mHandler != null) {
+            Log.d(TAG, "terminate");
+            mHandler.getLooper().quit();
+            mHandler = null;
+        }
+    }
+
     @Override
     public void onInputDeviceAdded(int deviceId) {
         Log.d(TAG, "onInputDeviceAdded id: " + deviceId);

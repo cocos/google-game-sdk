@@ -215,6 +215,13 @@ public class GameControllerManager {
         }
     }
 
+    public void terminate() {
+        if (gameControllerThread != null) {
+            gameControllerThread.terminate();
+            gameControllerThread = null;
+        }
+    }
+
     void checkForControllerRemovals(int[] deviceIds) {
         if (!nativeReady) {
             for (int index = 0; index < pendingControllerDeviceIds.size(); ++index) {
